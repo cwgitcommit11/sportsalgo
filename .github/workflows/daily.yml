@@ -1,0 +1,30 @@
+name: NHL Daily Picks
+
+on:
+  schedule:
+    - cron: "0 14 * * *"  # 2 PM UTC = 9 AM ET
+  workflow_dispatch:       # manual trigger
+
+jobs:
+  picks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Decode Google credentials
+        run: echo "${{ secrets.GOOGLE_CREDENTIALS_B64 }}" | base64 -d > credentials.json
+        env:
+          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
+
+      - name: Run SportsAlgo
+        run: python main.py
+        env:
+          GOOGLE_CREDENTIALS_FILE: credentials.json

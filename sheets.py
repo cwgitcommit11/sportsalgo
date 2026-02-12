@@ -69,6 +69,68 @@ def write_daily_picks(
     log.info("Wrote %d picks to '%s'", len(predictions), TAB_DAILY)
 
 
+# ── Standings (no-game days) ─────────────────────────────────────────────
+
+def write_standings(
+    client: gspread.Client,
+    standings: list[dict],
+    today_str: str,
+) -> None:
+    """Overwrite the 'Daily Picks' tab with current standings when no games."""
+    sh = client.open(SHEET_NAME)
+    ws = _get_or_create_worksheet(sh, TAB_DAILY)
+
+    rows: list[list[str]] = []
+    rows.append([f"No games today — NHL Standings as of {today_str}"])
+    rows.append([])
+
+    # Group by division
+    divisions: dict[str, list[dict]] = {}
+    for team in standings:
+        div = team.get("divisionName", "Unknown")
+        conf = team.get("conferenceName", "")
+        key = f"{conf} — {div}"
+        divisions.setdefault(key, []).append(team)
+
+    # Sort divisions, then teams within each by division rank
+    for div_name in sorted(divisions):
+        teams = sorted(divisions[div_name], key=lambda t: t.get("divisionSequence", 99))
+        rows.append([div_name, "GP", "W", "L", "OTL", "PTS", "Pt%", "GD", "L10", "Strk"])
+        for t in teams:
+            abbrev = t.get("teamAbbrev", {}).get("default", "???")
+            gp = t.get("gamesPlayed", 0)
+            w = t.get("wins", 0)
+            l = t.get("losses", 0)
+            otl = t.get("otLosses", 0)
+            pts = t.get("points", 0)
+            pt_pct = t.get("pointPctg", 0)
+            gf = t.get("goalFor", 0)
+            ga = t.get("goalAgainst", 0)
+            gd = gf - ga
+            gd_str = f"+{gd}" if gd > 0 else str(gd)
+            l10w = t.get("l10Wins", 0)
+            l10l = t.get("l10Losses", 0)
+            l10o = t.get("l10OtLosses", 0)
+            streak = f"{t.get('streakCode', '')} {t.get('streakCount', '')}".strip()
+            rows.append([
+                abbrev,
+                str(gp),
+                str(w),
+                str(l),
+                str(otl),
+                str(pts),
+                f"{pt_pct:.3f}",
+                gd_str,
+                f"{l10w}-{l10l}-{l10o}",
+                streak,
+            ])
+        rows.append([])  # blank row between divisions
+
+    ws.clear()
+    ws.update(rows, "A1")
+    log.info("Wrote standings to '%s'", TAB_DAILY)
+
+
 # ── Season Tracker (append) ─────────────────────────────────────────────
 
 def append_to_tracker(

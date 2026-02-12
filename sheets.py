@@ -41,6 +41,17 @@ def _get_or_create_worksheet(spreadsheet, title: str, rows: int = 1000, cols: in
         return spreadsheet.add_worksheet(title=title, rows=rows, cols=cols)
 
 
+def _cleanup_default_sheet(spreadsheet) -> None:
+    """Delete the default 'Sheet1' tab if other tabs exist."""
+    try:
+        sheet1 = spreadsheet.worksheet("Sheet1")
+        if len(spreadsheet.worksheets()) > 1:
+            spreadsheet.del_worksheet(sheet1)
+            log.info("Deleted default 'Sheet1' tab")
+    except gspread.WorksheetNotFound:
+        pass
+
+
 # ── Daily Picks (overwrite) ─────────────────────────────────────────────
 
 def write_daily_picks(
@@ -51,6 +62,7 @@ def write_daily_picks(
     """Overwrite the 'Daily Picks' tab with today's predictions."""
     sh = client.open(SHEET_NAME)
     ws = _get_or_create_worksheet(sh, TAB_DAILY)
+    _cleanup_default_sheet(sh)
 
     header = ["Date", "Game", "Pick", "Stars", "Key Factors"]
     rows = [header]
@@ -79,6 +91,7 @@ def write_standings(
     """Overwrite the 'Daily Picks' tab with current standings when no games."""
     sh = client.open(SHEET_NAME)
     ws = _get_or_create_worksheet(sh, TAB_DAILY)
+    _cleanup_default_sheet(sh)
 
     rows: list[list[str]] = []
     rows.append([f"No games today — NHL Standings as of {today_str}"])

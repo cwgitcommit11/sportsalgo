@@ -157,7 +157,7 @@ def append_to_tracker(
 
     # Ensure header exists
     existing = ws.get_all_values()
-    if not existing or existing[0][0] != "Date":
+    if not existing or not existing[0] or existing[0][0] != "Date":
         header = ["Date", "Game", "Pick", "Stars", "Result", "Correct?"]
         ws.update([header], "A1")
         # Leave row 2 for summary — data starts row 3

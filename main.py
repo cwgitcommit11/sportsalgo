@@ -61,7 +61,7 @@ def main() -> None:
 
     # ── Step 5: Write to Google Sheet ──
     if client:
-        write_daily_picks(client, predictions, today.isoformat())
+        write_daily_picks(client, predictions, today.isoformat(), yesterday.isoformat())
         append_to_tracker(client, predictions, today.isoformat())
     else:
         log.info("Sheets client unavailable — skipping sheet writes")

@@ -54,27 +54,51 @@ def _cleanup_default_sheet(spreadsheet) -> None:
 
 # ── Daily Picks (overwrite) ─────────────────────────────────────────────
 
+def _read_tracker_rows_for_date(sh, date_str: str) -> list[list[str]]:
+    """Return tracker rows matching date_str (skips header + summary row)."""
+    try:
+        ws = sh.worksheet(TAB_TRACKER)
+        all_rows = ws.get_all_values()
+        return [row for row in all_rows[2:] if row and row[0] == date_str]
+    except gspread.WorksheetNotFound:
+        return []
+
+
 def write_daily_picks(
     client: gspread.Client,
     predictions: list[dict],
     today_str: str,
+    yesterday_str: str | None = None,
 ) -> None:
-    """Overwrite the 'Daily Picks' tab with today's predictions."""
+    """Overwrite the 'Daily Picks' tab with today's picks and yesterday's results."""
     sh = client.open(SHEET_NAME)
     ws = _get_or_create_worksheet(sh, TAB_DAILY)
     _cleanup_default_sheet(sh)
 
-    header = ["Date", "Game", "Pick", "Stars", "Key Factors"]
-    rows = [header]
+    rows = []
+
+    # ── Today's picks ──
+    rows.append([f"Today — {today_str}", "", "", "", ""])
+    rows.append(["Game", "Pick", "Stars", "Key Factors", ""])
     for p in predictions:
         star_display = "SKIP" if p["pick"] == "SKIP" else "*" * p["stars"]
-        rows.append([
-            today_str,
-            p["game"],
-            p["pick"],
-            star_display,
-            p["key_factors"],
-        ])
+        rows.append([p["game"], p["pick"], star_display, p["key_factors"], ""])
+
+    # ── Yesterday's results ──
+    if yesterday_str:
+        yesterday_rows = _read_tracker_rows_for_date(sh, yesterday_str)
+        if yesterday_rows:
+            rows.append(["", "", "", "", ""])
+            rows.append([f"Yesterday — {yesterday_str}", "", "", "", ""])
+            rows.append(["Game", "Pick", "Stars", "Result", "Correct?"])
+            for r in yesterday_rows:
+                rows.append([
+                    r[1] if len(r) > 1 else "",
+                    r[2] if len(r) > 2 else "",
+                    r[3] if len(r) > 3 else "",
+                    r[4] if len(r) > 4 else "",
+                    r[5] if len(r) > 5 else "",
+                ])
 
     ws.clear()
     ws.update(rows, "A1")
@@ -197,9 +221,14 @@ def append_to_tracker(
     if not existing or not existing[0] or existing[0][0] != "Date":
         header = ["Date", "Game", "Pick", "Stars", "Result", "Correct?"]
         ws.update([header], "A1")
-        # Leave row 2 for summary — data starts row 3
-        ws.update([["", "", "", "", "", ""]], "A2")
+        # Row 2 is the summary — non-empty placeholder prevents append_rows overwriting it
+        ws.update([["Season Record: —", "", "", "", "", ""]], "A2")
         _apply_tracker_formatting(ws)
+
+    # Dedup — skip if today's picks are already in the tracker
+    if any(row[0] == today_str for row in existing[2:]):
+        log.info("Picks for %s already in tracker — skipping", today_str)
+        return
 
     new_rows = []
     for p in predictions:

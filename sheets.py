@@ -146,6 +146,43 @@ def write_standings(
 
 # ── Season Tracker (append) ─────────────────────────────────────────────
 
+def _apply_tracker_formatting(ws) -> None:
+    """Highlight 5-star rows green in the Season Tracker."""
+    sheet_id = ws.id
+    requests = [
+        {
+            "addConditionalFormatRule": {
+                "rule": {
+                    "ranges": [
+                        {
+                            "sheetId": sheet_id,
+                            "startRowIndex": 2,  # row 3 (0-indexed); skip header + summary
+                            "startColumnIndex": 0,
+                            "endColumnIndex": 6,
+                        }
+                    ],
+                    "booleanRule": {
+                        "condition": {
+                            "type": "CUSTOM_FORMULA",
+                            "values": [{"userEnteredValue": "=$D3=5"}],
+                        },
+                        "format": {
+                            "backgroundColor": {
+                                "red": 0.714,
+                                "green": 0.843,
+                                "blue": 0.659,
+                            }
+                        },
+                    },
+                },
+                "index": 0,
+            }
+        }
+    ]
+    ws.spreadsheet.batch_update({"requests": requests})
+    log.info("Applied green conditional formatting for 5-star rows")
+
+
 def append_to_tracker(
     client: gspread.Client,
     predictions: list[dict],
@@ -162,6 +199,7 @@ def append_to_tracker(
         ws.update([header], "A1")
         # Leave row 2 for summary — data starts row 3
         ws.update([["", "", "", "", "", ""]], "A2")
+        _apply_tracker_formatting(ws)
 
     new_rows = []
     for p in predictions:

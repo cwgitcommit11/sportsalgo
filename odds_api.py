@@ -47,6 +47,14 @@ def fetch_nhl_odds(name_to_abbrev: dict[str, str]) -> dict[str, dict]:
     remaining = resp.headers.get("x-requests-remaining", "?")
     log.info("Odds API: %d games fetched (%s requests remaining this month)", len(data), remaining)
 
+    # Log sample names from both sides so mismatches are visible
+    if data:
+        sample = data[0]
+        log.info("Odds API sample names: '%s' vs '%s'", sample.get("home_team"), sample.get("away_team"))
+    if name_to_abbrev:
+        sample_keys = list(name_to_abbrev.keys())[:4]
+        log.info("name_to_abbrev sample keys: %s", sample_keys)
+
     odds_map: dict[str, dict] = {}
     for game in data:
         home_full = game.get("home_team", "")

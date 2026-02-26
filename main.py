@@ -6,7 +6,10 @@ Run daily via GitHub Actions or manually:
 
 import logging
 import sys
-from datetime import date, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+_ET = ZoneInfo("America/New_York")
 
 from nhl_api import fetch_standings, fetch_team_stats, fetch_todays_games, fetch_scores, build_full_name_to_abbrev
 from odds_api import fetch_nhl_odds
@@ -21,7 +24,7 @@ log = logging.getLogger("sportsalgo")
 
 
 def main() -> None:
-    today = date.today()
+    today = datetime.now(_ET).date()
     yesterday = today - timedelta(days=1)
     log.info("SportsAlgo NHL — run date: %s", today)
 
@@ -48,7 +51,7 @@ def main() -> None:
         log.warning("Team stats unavailable — using standings-only mode")
 
     log.info("Fetching today's schedule…")
-    games = fetch_todays_games()
+    games = fetch_todays_games(today)
     if not games:
         log.info("No games scheduled for %s — writing standings", today)
         if client:

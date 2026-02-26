@@ -2,6 +2,7 @@
 
 import logging
 import os
+import unicodedata
 
 import requests
 
@@ -50,8 +51,13 @@ def fetch_nhl_odds(name_to_abbrev: dict[str, str]) -> dict[str, dict]:
     for game in data:
         home_full = game.get("home_team", "")
         away_full = game.get("away_team", "")
-        home_abbrev = name_to_abbrev.get(home_full, "")
-        away_abbrev = name_to_abbrev.get(away_full, "")
+        # Try exact match first, then accent-normalized fallback
+        home_abbrev = name_to_abbrev.get(home_full) or name_to_abbrev.get(
+            unicodedata.normalize("NFKD", home_full).encode("ascii", "ignore").decode(), ""
+        )
+        away_abbrev = name_to_abbrev.get(away_full) or name_to_abbrev.get(
+            unicodedata.normalize("NFKD", away_full).encode("ascii", "ignore").decode(), ""
+        )
 
         if not home_abbrev or not away_abbrev:
             log.debug("Could not map odds team names: '%s' / '%s'", home_full, away_full)

@@ -1,6 +1,7 @@
 """NHL public API client — standings, team stats, schedule, scores."""
 
 import logging
+import unicodedata
 from datetime import date, datetime
 
 import requests
@@ -55,10 +56,16 @@ def _build_name_to_abbrev(standings: list[dict]) -> dict[str, str]:
     return mapping
 
 
+def _normalize(s: str) -> str:
+    """Strip accents so 'Montréal' matches 'Montreal'."""
+    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+
+
 def build_full_name_to_abbrev(standings: list[dict]) -> dict[str, str]:
     """Build {city + teamName: abbrev} for matching against The Odds API team names.
 
-    e.g. "Toronto Maple Leafs" → "TOR"
+    Stores both accented and ASCII-normalized versions so e.g.
+    both "Montréal Canadiens" and "Montreal Canadiens" map to "MTL".
     """
     mapping: dict[str, str] = {}
     for team in standings:
@@ -66,7 +73,9 @@ def build_full_name_to_abbrev(standings: list[dict]) -> dict[str, str]:
         name = team.get("teamName", {}).get("default", "")
         abbrev = team.get("teamAbbrev", {}).get("default", "")
         if place and name and abbrev:
-            mapping[f"{place} {name}"] = abbrev
+            full = f"{place} {name}"
+            mapping[full] = abbrev
+            mapping[_normalize(full)] = abbrev  # accent-stripped fallback
     return mapping
 
 
@@ -97,7 +106,7 @@ def fetch_team_stats(standings: list[dict] | None = None) -> dict[str, dict]:
 
 # ── Today's Schedule ────────────────────────────────────────────────────
 
-def fetch_todays_games() -> list[dict]:
+def fetch_todays_games(game_date: date | None = None) -> list[dict]:
     """Return today's games from /v1/schedule/now.
 
     Each game dict contains at least:
@@ -107,7 +116,7 @@ def fetch_todays_games() -> list[dict]:
     data = _get(SCHEDULE_URL)
     if not data:
         return []
-    today_str = date.today().isoformat()
+    today_str = (game_date or date.today()).isoformat()
     for week in data.get("gameWeek", []):
         if week.get("date") == today_str:
             # Only return regular-season (gameType 2) or playoff (gameType 3) games

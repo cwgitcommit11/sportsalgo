@@ -62,20 +62,19 @@ def _normalize(s: str) -> str:
 
 
 def build_full_name_to_abbrev(standings: list[dict]) -> dict[str, str]:
-    """Build {city + teamName: abbrev} for matching against The Odds API team names.
+    """Build {full team name: abbrev} for matching against The Odds API team names.
 
-    Stores both accented and ASCII-normalized versions so e.g.
-    both "Montréal Canadiens" and "Montreal Canadiens" map to "MTL".
+    teamName.default already includes the city ("Colorado Avalanche"),
+    so we use it directly. Stores both accented and ASCII-normalized versions
+    so "Montréal Canadiens" and "Montreal Canadiens" both map to "MTL".
     """
     mapping: dict[str, str] = {}
     for team in standings:
-        place = team.get("placeName", {}).get("default", "")
-        name = team.get("teamName", {}).get("default", "")
+        full_name = team.get("teamName", {}).get("default", "")
         abbrev = team.get("teamAbbrev", {}).get("default", "")
-        if place and name and abbrev:
-            full = f"{place} {name}"
-            mapping[full] = abbrev
-            mapping[_normalize(full)] = abbrev  # accent-stripped fallback
+        if full_name and abbrev:
+            mapping[full_name] = abbrev
+            mapping[_normalize(full_name)] = abbrev  # accent-stripped fallback
     return mapping
 
 

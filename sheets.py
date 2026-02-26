@@ -196,7 +196,7 @@ def _apply_tracker_formatting(ws) -> None:
                             "sheetId": sheet_id,
                             "startRowIndex": 2,  # row 3 (0-indexed); skip header + summary
                             "startColumnIndex": 0,
-                            "endColumnIndex": 6,
+                            "endColumnIndex": 8,
                         }
                     ],
                     "booleanRule": {
@@ -230,14 +230,19 @@ def append_to_tracker(
     sh = client.open(SHEET_NAME)
     ws = _get_or_create_worksheet(sh, TAB_TRACKER)
 
+    _HEADER = ["Date", "Game", "Pick", "Stars", "Result", "Correct?", "Odds", "P/L"]
+
     # Ensure header exists
     existing = ws.get_all_values()
     if not existing or not existing[0] or existing[0][0] != "Date":
-        header = ["Date", "Game", "Pick", "Stars", "Result", "Correct?"]
-        ws.update([header], "A1")
+        ws.update([_HEADER], "A1")
         # Row 2 is the summary — non-empty placeholder prevents append_rows overwriting it
-        ws.update([["Season Record: —", "", "", "", "", ""]], "A2")
+        ws.update([["Season Record: —", "", "", "", "", "", "", ""]], "A2")
         _apply_tracker_formatting(ws)
+    elif len(existing[0]) < 8:
+        # Upgrade existing header to include Odds and P/L columns
+        ws.update([_HEADER], "A1")
+        log.info("Upgraded tracker header to include Odds and P/L columns")
 
     # Dedup — skip if today's picks are already in the tracker
     if any(row[0] == today_str for row in existing[2:]):
@@ -248,13 +253,16 @@ def append_to_tracker(
     for p in predictions:
         if p["pick"] == "SKIP":
             continue
+        odds_val = p.get("pick_odds", "")
         new_rows.append([
             today_str,
             p["game"],
             p["pick"],
             p["stars"],
-            "",  # Result — filled in next day
-            "",  # Correct? — filled in next day
+            "",        # Result — filled in next day
+            "",        # Correct? — filled in next day
+            odds_val,  # Odds
+            "",        # P/L — filled in next day
         ])
 
     if new_rows:
@@ -301,6 +309,19 @@ def update_results(
             cell_row = i + 1  # 1-indexed
             ws.update(f"E{cell_row}", [[result_str]])
             ws.update(f"F{cell_row}", [[correct]])
+
+            # P/L on $100 stake using stored odds (column G, index 6)
+            if len(row) > 6 and row[6] not in ("", None):
+                try:
+                    odds = int(row[6])
+                    if correct == "Y":
+                        pl = float(odds) if odds >= 0 else round(10000.0 / abs(odds), 2)
+                    else:
+                        pl = -100.0
+                    ws.update(f"H{cell_row}", [[pl]])
+                except (ValueError, ZeroDivisionError):
+                    pass
+
             updates += 1
 
     log.info("Updated %d results for %s", updates, yesterday_str)
@@ -317,6 +338,7 @@ def update_summary_row(ws, all_rows: list[list[str]] | None = None) -> None:
         all_rows = ws.get_all_values()
 
     total_w = total_l = 0
+    total_pl = 0.0
     star_stats: dict[int, dict[str, int]] = {}
 
     for row in all_rows[2:]:  # skip header + summary
@@ -330,18 +352,22 @@ def update_summary_row(ws, all_rows: list[list[str]] | None = None) -> None:
             total_l += 1
         if stars not in star_stats:
             star_stats[stars] = {"W": 0, "L": 0}
-        star_stats[stars]["Y" if correct else "N"] = (
-            star_stats[stars].get("Y" if correct else "N", 0) + 1
-        )
         if correct:
             star_stats[stars]["W"] += 1
         else:
             star_stats[stars]["L"] += 1
+        # Accumulate P/L (column H, index 7)
+        if len(row) > 7 and row[7] not in ("", None):
+            try:
+                total_pl += float(row[7])
+            except ValueError:
+                pass
 
     total = total_w + total_l
     pct = f"{total_w / total * 100:.1f}%" if total else "N/A"
+    roi_str = f"${total_pl:+.2f}" if total_pl != 0 else "—"
 
-    parts = [f"Overall: {total_w}-{total_l} ({pct})"]
+    parts = [f"Overall: {total_w}-{total_l} ({pct})", f"ROI: {roi_str} per $100/bet"]
     for s in sorted(star_stats):
         sw = star_stats[s]["W"]
         sl = star_stats[s]["L"]
@@ -350,5 +376,5 @@ def update_summary_row(ws, all_rows: list[list[str]] | None = None) -> None:
         parts.append(f"{s}*: {sw}-{sl} ({sp})")
 
     summary = " | ".join(parts)
-    ws.update("A2", [[summary, "", "", "", "", ""]])
+    ws.update("A2", [[summary, "", "", "", "", "", "", ""]])
     log.info("Summary: %s", summary)

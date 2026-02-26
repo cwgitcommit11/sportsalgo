@@ -45,13 +45,28 @@ def fetch_standings() -> list[dict]:
 # ── Team Aggregate Stats ────────────────────────────────────────────────
 
 def _build_name_to_abbrev(standings: list[dict]) -> dict[str, str]:
-    """Build {teamFullName: abbrev} from standings data."""
+    """Build {teamName: abbrev} from standings data (used internally by fetch_team_stats)."""
     mapping: dict[str, str] = {}
     for team in standings:
         full_name = team.get("teamName", {}).get("default", "")
         abbrev = team.get("teamAbbrev", {}).get("default", "")
         if full_name and abbrev:
             mapping[full_name] = abbrev
+    return mapping
+
+
+def build_full_name_to_abbrev(standings: list[dict]) -> dict[str, str]:
+    """Build {city + teamName: abbrev} for matching against The Odds API team names.
+
+    e.g. "Toronto Maple Leafs" → "TOR"
+    """
+    mapping: dict[str, str] = {}
+    for team in standings:
+        place = team.get("placeName", {}).get("default", "")
+        name = team.get("teamName", {}).get("default", "")
+        abbrev = team.get("teamAbbrev", {}).get("default", "")
+        if place and name and abbrev:
+            mapping[f"{place} {name}"] = abbrev
     return mapping
 
 

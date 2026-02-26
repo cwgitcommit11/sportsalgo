@@ -28,3 +28,4 @@ jobs:
         run: python main.py
         env:
           GOOGLE_CREDENTIALS_FILE: credentials.json
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}

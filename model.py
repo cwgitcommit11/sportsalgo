@@ -1,6 +1,7 @@
 """Prediction engine — 7-factor weighted model with situational adjustments."""
 
 import logging
+import math
 from datetime import date, timedelta
 
 from config import (
@@ -16,6 +17,33 @@ from config import (
 from nhl_api import fetch_team_schedule, game_dates_from_schedule
 
 log = logging.getLogger(__name__)
+
+
+# ── EV / Odds Helpers ────────────────────────────────────────────────────
+
+_LOGISTIC_K = 5.0  # scales composite diff → win probability
+
+
+def _diff_to_win_prob(diff: float) -> float:
+    """Convert absolute composite differential to win probability (logistic)."""
+    return 1.0 / (1.0 + math.exp(-_LOGISTIC_K * diff))
+
+
+def _american_to_implied(odds: int) -> float:
+    """American odds → raw implied probability (includes vig)."""
+    if odds >= 0:
+        return 100.0 / (odds + 100.0)
+    return abs(odds) / (abs(odds) + 100.0)
+
+
+def _ev_pct(model_prob: float, odds: int) -> float:
+    """Expected value as a percentage of stake.
+
+    e.g. +8.5 means a $100 bet has an expected profit of $8.50.
+    """
+    payout = odds / 100.0 if odds >= 0 else 100.0 / abs(odds)
+    ev = model_prob * payout - (1.0 - model_prob)
+    return round(ev * 100, 1)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -210,6 +238,7 @@ def predict_game(
     ratings: dict[str, dict],
     schedule_cache: dict[str, list[date]],
     game_date: date,
+    game_odds: dict | None = None,
 ) -> dict | None:
     """Predict one game. Returns a prediction dict or None if data missing."""
     home_r = ratings.get(home_abbrev)
@@ -281,6 +310,14 @@ def predict_game(
     # Build reasoning string
     key_factors = ", ".join(adjustments[:4]) if adjustments else "even matchup"
 
+    # EV calculation (only when odds are available and we have a real pick)
+    ev_pct = None
+    pick_odds = None
+    if game_odds and pick != "SKIP":
+        pick_odds = game_odds["home_odds"] if pick == home_abbrev else game_odds["away_odds"]
+        model_prob = _diff_to_win_prob(abs(diff))
+        ev_pct = _ev_pct(model_prob, pick_odds)
+
     return {
         "game": f"{away_abbrev} @ {home_abbrev}",
         "home": home_abbrev,
@@ -289,6 +326,8 @@ def predict_game(
         "stars": stars,
         "diff": round(diff, 4),
         "key_factors": key_factors,
+        "ev_pct": ev_pct,
+        "pick_odds": pick_odds,
     }
 
 
@@ -299,6 +338,7 @@ def predict_today(
     team_stats: dict[str, dict],
     games: list[dict],
     game_date: date | None = None,
+    odds_map: dict[str, dict] | None = None,
 ) -> list[dict]:
     """Run the full model on today's slate. Returns a list of prediction dicts."""
     if game_date is None:
@@ -317,7 +357,9 @@ def predict_today(
         away = game.get("awayTeam", {}).get("abbrev", "")
         if not home or not away:
             continue
-        pred = predict_game(home, away, ratings, schedule_cache, game_date)
+        game_key = f"{away} @ {home}"
+        game_odds = odds_map.get(game_key) if odds_map else None
+        pred = predict_game(home, away, ratings, schedule_cache, game_date, game_odds)
         if pred:
             predictions.append(pred)
 

@@ -84,6 +84,20 @@ def write_daily_picks(
         star_display = "SKIP" if p["pick"] == "SKIP" else "*" * p["stars"]
         rows.append([p["game"], p["pick"], star_display, p["key_factors"], ""])
 
+    # ── EV Plays ──
+    ev_plays = sorted(
+        [p for p in predictions if p.get("ev_pct") is not None and p["ev_pct"] > 0 and p["pick"] != "SKIP"],
+        key=lambda p: -p["ev_pct"],
+    )
+    if ev_plays:
+        rows.append(["", "", "", "", ""])
+        rows.append([f"EV Plays — {today_str}", "", "", "", ""])
+        rows.append(["Game", "Pick", "Odds", "EV%", ""])
+        for p in ev_plays:
+            odds_val = p["pick_odds"]
+            odds_str = f"+{odds_val}" if odds_val >= 0 else str(odds_val)
+            rows.append([p["game"], p["pick"], odds_str, f"+{p['ev_pct']}%", ""])
+
     # ── Yesterday's results ──
     if yesterday_str:
         yesterday_rows = _read_tracker_rows_for_date(sh, yesterday_str)

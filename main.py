@@ -8,7 +8,8 @@ import logging
 import sys
 from datetime import date, timedelta
 
-from nhl_api import fetch_standings, fetch_team_stats, fetch_todays_games, fetch_scores
+from nhl_api import fetch_standings, fetch_team_stats, fetch_todays_games, fetch_scores, build_full_name_to_abbrev
+from odds_api import fetch_nhl_odds
 from model import predict_today
 from sheets import get_client, write_daily_picks, write_standings, append_to_tracker, update_results
 
@@ -56,8 +57,12 @@ def main() -> None:
         return
 
     # ── Step 3 & 4: Compute ratings and predict ──
+    log.info("Fetching odds…")
+    name_map = build_full_name_to_abbrev(standings)
+    odds_map = fetch_nhl_odds(name_map)
+
     log.info("Running predictions for %d games…", len(games))
-    predictions = predict_today(standings, team_stats, games, today)
+    predictions = predict_today(standings, team_stats, games, today, odds_map)
 
     # ── Step 5: Write to Google Sheet ──
     if client:

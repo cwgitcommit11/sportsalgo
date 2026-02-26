@@ -57,8 +57,12 @@ def _build_name_to_abbrev(standings: list[dict]) -> dict[str, str]:
 
 
 def _normalize(s: str) -> str:
-    """Strip accents so 'Montréal' matches 'Montreal'."""
-    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    """Strip accents and periods for fuzzy matching.
+
+    Handles 'Montréal' → 'Montreal' and 'St. Louis' → 'St Louis'.
+    """
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    return s.replace(".", "")
 
 
 def build_full_name_to_abbrev(standings: list[dict]) -> dict[str, str]:

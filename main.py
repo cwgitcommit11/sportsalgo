@@ -6,7 +6,7 @@ Run daily via GitHub Actions or manually:
 
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 _ET = ZoneInfo("America/New_York")

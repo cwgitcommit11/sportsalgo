@@ -2,9 +2,14 @@
 
 import logging
 import os
+import statistics
 import unicodedata
 
 import requests
+
+# NHL moneyline sanity bounds — anything outside this range is bad data
+_ODDS_MIN = -600
+_ODDS_MAX = 500
 
 log = logging.getLogger(__name__)
 
@@ -70,17 +75,23 @@ def fetch_nhl_odds(name_to_abbrev: dict[str, str]) -> dict[str, dict]:
                 if market.get("key") != "h2h":
                     continue
                 for outcome in market.get("outcomes", []):
+                    price = outcome.get("price", 0)
+                    if not (_ODDS_MIN <= price <= _ODDS_MAX):
+                        log.warning("Rejected out-of-range odds %.0f from %s", price, bm.get("key"))
+                        continue
                     if outcome["name"] == home_full:
-                        home_prices.append(outcome["price"])
+                        home_prices.append(price)
                     elif outcome["name"] == away_full:
-                        away_prices.append(outcome["price"])
+                        away_prices.append(price)
 
         if not home_prices or not away_prices:
             continue
 
+        home_odds = round(statistics.median(home_prices))
+        away_odds = round(statistics.median(away_prices))
         odds_map[f"{away_abbrev} @ {home_abbrev}"] = {
-            "home_odds": round(sum(home_prices) / len(home_prices)),
-            "away_odds": round(sum(away_prices) / len(away_prices)),
+            "home_odds": home_odds,
+            "away_odds": away_odds,
         }
 
     log.info("Matched odds for %d of %d games", len(odds_map), len(data))
